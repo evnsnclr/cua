@@ -11,10 +11,14 @@ Supported Agent Loops and Models:
 - AgentLoop.ANTHROPIC: Uses Anthropic Computer-Use models
   • claude-3-5-sonnet-20240620
   • claude-3-7-sonnet-20250219
+  • claude-opus-4-20250514
+  • claude-sonnet-4-20250514
 
 - AgentLoop.OMNI (experimental): Uses OmniParser for element pixel-detection
   • claude-3-5-sonnet-20240620
   • claude-3-7-sonnet-20250219
+  • claude-opus-4-20250514
+  • claude-sonnet-4-20250514
   • gpt-4.5-preview
   • gpt-4o
   • gpt-4
@@ -27,23 +31,21 @@ Requirements:
     - OpenAI or Anthropic API key
 """
 
-import os
-import asyncio
-import logging
 import json
+import logging
+import os
 from pathlib import Path
-from typing import Dict, List, Optional, AsyncGenerator, Any, Tuple, Union
+from typing import Any, Dict, List, Optional, cast
+
 import gradio as gr
+from computer import Computer
 from gradio.components.chatbot import MetadataDict
-from typing import cast
+
+from agent import LLM, AgentLoop, ComputerAgent, LLMProvider
+from agent.core.callbacks import DefaultCallbackHandler
 
 # Import from agent package
-from agent.core.types import AgentResponse
-from agent.core.callbacks import DefaultCallbackHandler
 from agent.providers.omni.parser import ParseResult
-from computer import Computer
-
-from agent import ComputerAgent, AgentLoop, LLM, LLMProvider
 
 # Global variables
 global_agent = None
@@ -147,11 +149,17 @@ MODEL_MAPPINGS = {
         # Specific Claude models for CUA
         "claude-3-5-sonnet-20240620": "claude-3-5-sonnet-20240620",
         "claude-3-7-sonnet-20250219": "claude-3-7-sonnet-20250219",
+        "claude-opus-4-20250514": "claude-opus-4-20250514",
+        "claude-sonnet-4-20250514": "claude-sonnet-4-20250514",
         # Map standard model names to CUA-specific model names
         "claude-3-opus": "claude-3-7-sonnet-20250219",
         "claude-3-sonnet": "claude-3-5-sonnet-20240620",
         "claude-3-5-sonnet": "claude-3-5-sonnet-20240620",
         "claude-3-7-sonnet": "claude-3-7-sonnet-20250219",
+        "claude-4-opus": "claude-opus-4-20250514",
+        "claude-opus-4": "claude-opus-4-20250514",
+        "claude-4-sonnet": "claude-sonnet-4-20250514",
+        "claude-sonnet-4": "claude-sonnet-4-20250514",
     },
     "omni": {
         # OMNI works with any of these models
@@ -162,6 +170,12 @@ MODEL_MAPPINGS = {
         "gpt-4.5-preview": "gpt-4.5-preview",
         "claude-3-5-sonnet-20240620": "claude-3-5-sonnet-20240620",
         "claude-3-7-sonnet-20250219": "claude-3-7-sonnet-20250219",
+        "claude-opus-4-20250514": "claude-opus-4-20250514",
+        "claude-sonnet-4-20250514": "claude-sonnet-4-20250514",
+        "claude-4-opus": "claude-opus-4-20250514",
+        "claude-opus-4": "claude-opus-4-20250514",
+        "claude-4-sonnet": "claude-sonnet-4-20250514",
+        "claude-sonnet-4": "claude-sonnet-4-20250514",
     },
     "uitars": {
         # UI-TARS models using MLXVLM provider
@@ -427,13 +441,17 @@ def create_gradio_ui(
     anthropic_models = [
         "Anthropic: Claude 3.7 Sonnet (20250219)",
         "Anthropic: Claude 3.5 Sonnet (20240620)",
+        "Anthropic: Claude Opus 4 (20250514)",
+        "Anthropic: Claude Sonnet 4 (20250514)",
     ]
     omni_models = [
         "OMNI: OpenAI GPT-4o",
         "OMNI: OpenAI GPT-4o mini",
         "OMNI: OpenAI GPT-4.5-preview",
-        "OMNI: Claude 3.7 Sonnet (20250219)", 
-        "OMNI: Claude 3.5 Sonnet (20240620)"
+        "OMNI: Claude 3.7 Sonnet (20250219)",
+        "OMNI: Claude 3.5 Sonnet (20240620)",
+        "OMNI: Claude Opus 4 (20250514)",
+        "OMNI: Claude Sonnet 4 (20250514)"
     ]
     
     # Check if API keys are available
@@ -531,7 +549,7 @@ async def main():
         # Add the model configuration based on provider and agent loop
         if agent_loop_choice == "OPENAI":
             # For OPENAI loop, always use OPENAI provider with computer-use-preview
-            code += f'''
+            code += '''
             model=LLM(
                 provider=LLMProvider.OPENAI, 
                 name="computer-use-preview"
@@ -599,10 +617,10 @@ async def main():
                 print(result)'''
         else:
             # If no tasks, just add a placeholder for a single task
-            code += f'''
+            code += '''
         # Execute a single task
         task = "Search for information about CUA on GitHub"
-        print(f"Executing task: {{task}}")
+        print(f"Executing task: {task}")
         async for result in agent.run(task):
             print(result)'''
 
@@ -746,14 +764,14 @@ if __name__ == "__main__":
                     def set_openai_api_key(key):
                         if key and key.strip():
                             os.environ["OPENAI_API_KEY"] = key.strip()
-                            print(f"DEBUG - Set OpenAI API key environment variable")
+                            print("DEBUG - Set OpenAI API key environment variable")
                         return key
                     
                     # Function to set Anthropic API key environment variable
                     def set_anthropic_api_key(key):
                         if key and key.strip():
                             os.environ["ANTHROPIC_API_KEY"] = key.strip()
-                            print(f"DEBUG - Set Anthropic API key environment variable")
+                            print("DEBUG - Set Anthropic API key environment variable")
                         return key
                     
                     # Add change event handlers for API key inputs
@@ -1072,14 +1090,14 @@ if __name__ == "__main__":
                             if openai_key_input:
                                 # Set the environment variable for the OpenAI API key
                                 os.environ["OPENAI_API_KEY"] = openai_key_input
-                                print(f"DEBUG - Using provided OpenAI API key from UI and set as environment variable")
+                                print("DEBUG - Using provided OpenAI API key from UI and set as environment variable")
                         elif provider == LLMProvider.ANTHROPIC:
                             # Use Anthropic key from input if provided, otherwise use environment variable
                             api_key = anthropic_key_input if anthropic_key_input else (anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY", ""))
                             if anthropic_key_input:
                                 # Set the environment variable for the Anthropic API key
                                 os.environ["ANTHROPIC_API_KEY"] = anthropic_key_input
-                                print(f"DEBUG - Using provided Anthropic API key from UI and set as environment variable")
+                                print("DEBUG - Using provided Anthropic API key from UI and set as environment variable")
                         else:
                             # For Ollama or default OAICOMPAT (without custom key), no key needed/expected
                             api_key = ""
@@ -1147,10 +1165,10 @@ if __name__ == "__main__":
 
                         # Stream responses from the agent
                         async for result in global_agent.run(last_user_message):
-                            print(f"DEBUG - Agent response ------- START")
+                            print("DEBUG - Agent response ------- START")
                             from pprint import pprint
                             pprint(result)
-                            print(f"DEBUG - Agent response ------- END")
+                            print("DEBUG - Agent response ------- END")
                             
                             def generate_gradio_messages():
                                 if result.get("content"):
